@@ -85,7 +85,7 @@ class ReviewAnalyzer:
             except Exception as e:
                 if ("429" in str(e) or "rate_limit" in str(e)) and attempt < 3:
                     import time
-                    time.sleep(2 * (attempt + 1))
+                    time.sleep(0.5 * (attempt + 1))
                     continue
                 print(f"Error classifying review {review.review_id}: {e}")
                 # Fallback if parsing fails

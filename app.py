@@ -151,7 +151,7 @@ def run_pipeline(uploaded_file=None):
         return analyzer.analyze_review(r)
         
     from concurrent.futures import as_completed
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         future_to_review = [executor.submit(analyze_single, r) for r in reviews]
         completed = 0
         for future in as_completed(future_to_review):
