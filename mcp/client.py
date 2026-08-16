@@ -122,6 +122,6 @@ class MCPClient:
         draft = self.gmail_service.users().drafts().create(
             userId="me", body=create_message).execute()
             
-        # Get exact draft ID for Gmail web compose link
-        draft_id = draft.get('id', draft.get('message', {}).get('id'))
+        # Use draft['message']['id'] which Gmail web UI requires for ?compose= deep linking
+        draft_id = draft.get('message', {}).get('id', draft.get('id'))
         return f"https://mail.google.com/mail/u/0/#drafts?compose={draft_id}"
