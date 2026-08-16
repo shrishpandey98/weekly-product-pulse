@@ -1,0 +1,14 @@
+# Acme Financial Fee Schedule
+
+## Monthly Maintenance Fees
+- Standard Account: $5.00 per month.
+- Premium Account: $15.00 per month (Waived if minimum balance of $10,000 is maintained).
+
+## Withdrawal Fees
+- ATM Withdrawal (In-Network): Free.
+- ATM Withdrawal (Out-of-Network): $2.50 per transaction.
+- Early Withdrawal Charge: If you withdraw funds from a Fixed Term Deposit before the maturity date, an early withdrawal charge of $50.00 will be applied to the transaction. This is to cover the administrative costs of breaking the fixed term contract.
+
+## Transfer Fees
+- Domestic Wire Transfer: $15.00.
+- International Wire Transfer: $35.00.
