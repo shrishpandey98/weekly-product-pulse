@@ -7,6 +7,13 @@ class FeeExplainer:
         if not api_key:
             api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
+            try:
+                import streamlit as st
+                if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+                    api_key = st.secrets["GROQ_API_KEY"]
+            except Exception:
+                pass
+        if not api_key:
             raise ValueError("API key for Groq is not set.")
         
         self.client = Groq(api_key=api_key)
@@ -40,42 +47,47 @@ class FeeExplainer:
         }}
         """
         
-        try:
-            response = self.client.chat.completions.create(
-                model='llama-3.1-8b-instant',
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.0,
-            )
-            
-            import json
-            data = json.loads(response.choices[0].message.content)
-            
-            is_applicable = data.get("is_applicable", False)
-            explanation = data.get("explanation", "")
-            source_quote = data.get("source_quote", "")
-            
-            # Verbatim Validation: Check if quote is actually in the Fee Schedule
-            if is_applicable and source_quote and source_quote not in self.fee_schedule_text:
-                # LLM hallucinated the source quote! We cannot trust the explanation.
-                return FeeExplanation(
-                    is_applicable=False,
-                    explanation="Automated explanation blocked due to source validation failure (hallucination detected).",
-                    source_quote=""
+        for attempt in range(4):
+            try:
+                response = self.client.chat.completions.create(
+                    model='llama-3.1-8b-instant',
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
                 )
                 
-            return FeeExplanation(
-                is_applicable=is_applicable,
-                explanation=explanation,
-                source_quote=source_quote
-            )
-        except Exception as e:
-            print(f"Error explaining fee: {e}")
-            return FeeExplanation(
-                is_applicable=False,
-                explanation="Could not generate explanation due to an error.",
-                source_quote=""
-            )
+                import json
+                data = json.loads(response.choices[0].message.content)
+                
+                is_applicable = data.get("is_applicable", False)
+                explanation = data.get("explanation", "")
+                source_quote = data.get("source_quote", "")
+                
+                # Verbatim Validation: Check if quote is actually in the Fee Schedule
+                if is_applicable and source_quote and source_quote not in self.fee_schedule_text:
+                    # LLM hallucinated the source quote! We cannot trust the explanation.
+                    return FeeExplanation(
+                        is_applicable=False,
+                        explanation="Automated explanation blocked due to source validation failure (hallucination detected).",
+                        source_quote=""
+                    )
+                    
+                return FeeExplanation(
+                    is_applicable=is_applicable,
+                    explanation=explanation,
+                    source_quote=source_quote
+                )
+            except Exception as e:
+                if ("429" in str(e) or "rate_limit" in str(e)) and attempt < 3:
+                    import time
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                print(f"Error explaining fee: {e}")
+                return FeeExplanation(
+                    is_applicable=False,
+                    explanation="Could not generate explanation due to an error.",
+                    source_quote=""
+                )
 
