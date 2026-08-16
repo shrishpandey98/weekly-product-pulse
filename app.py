@@ -150,11 +150,15 @@ def run_pipeline(uploaded_file=None):
     def analyze_single(r):
         return analyzer.analyze_review(r)
         
+    from concurrent.futures import as_completed
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = list(executor.map(analyze_single, reviews))
-        for i, res in enumerate(futures):
+        future_to_review = [executor.submit(analyze_single, r) for r in reviews]
+        completed = 0
+        for future in as_completed(future_to_review):
+            res = future.result()
             analyzed_reviews.append(res)
-            progress_bar.progress((i + 1) / len(reviews), text=f"Categorized {i+1}/{len(reviews)} reviews...")
+            completed += 1
+            progress_bar.progress(completed / len(reviews), text=f"Categorized {completed}/{len(reviews)} reviews...")
             
     st.session_state.analyzed_reviews = analyzed_reviews
 

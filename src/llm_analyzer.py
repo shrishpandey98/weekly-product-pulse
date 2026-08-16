@@ -12,6 +12,13 @@ class ReviewAnalyzer:
         if not api_key:
             api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
+            try:
+                import streamlit as st
+                if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+                    api_key = st.secrets["GROQ_API_KEY"]
+            except Exception:
+                pass
+        if not api_key:
             raise ValueError("API key for Groq is not set.")
         
         self.client = Groq(api_key=api_key)
