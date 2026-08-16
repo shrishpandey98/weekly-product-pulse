@@ -143,22 +143,25 @@ def run_pipeline(uploaded_file=None):
                 review_text=row['review_text']
             ))
 
-    # 2. Categorize Reviews (Concurrent)
+    # 2. Categorize Reviews (Concurrent Mini-Batching)
     progress_bar = st.progress(0, text="Categorizing Reviews via Llama 3...")
     analyzed_reviews = []
     
-    def analyze_single(r):
-        return analyzer.analyze_review(r)
+    chunk_size = 10
+    chunks = [reviews[i:i + chunk_size] for i in range(0, len(reviews), chunk_size)]
+    
+    def process_chunk(chunk):
+        return analyzer.analyze_batch_chunk(chunk)
         
     from concurrent.futures import as_completed
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_to_review = [executor.submit(analyze_single, r) for r in reviews]
-        completed = 0
-        for future in as_completed(future_to_review):
-            res = future.result()
-            analyzed_reviews.append(res)
-            completed += 1
-            progress_bar.progress(completed / len(reviews), text=f"Categorized {completed}/{len(reviews)} reviews...")
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_chunk = [executor.submit(process_chunk, c) for c in chunks]
+        completed_count = 0
+        for future in as_completed(future_to_chunk):
+            res_list = future.result()
+            analyzed_reviews.extend(res_list)
+            completed_count += len(res_list)
+            progress_bar.progress(min(1.0, completed_count / len(reviews)), text=f"Categorized {completed_count}/{len(reviews)} reviews...")
             
     st.session_state.analyzed_reviews = analyzed_reviews
 

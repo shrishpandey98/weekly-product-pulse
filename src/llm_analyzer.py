@@ -100,13 +100,101 @@ class ReviewAnalyzer:
                     has_pii=False
                 )
 
+    def analyze_batch_chunk(self, chunk: List[Review]) -> List[AnalyzedReview]:
+        """
+        Analyzes a chunk of up to 10 reviews in a SINGLE LLM prompt call for 10x speedup.
+        """
+        if not chunk:
+            return []
+            
+        formatted_reviews = "\n".join([
+            f"- Review ID: {r.review_id} | Text: \"{r.review_text}\""
+            for r in chunk
+        ])
+        
+        prompt = f"""
+        Analyze the following batch of user reviews for a financial application.
+        For EACH review:
+        1. Assign it to the most relevant theme from this list: {THEMES}.
+        2. Determine the sentiment (Positive, Neutral, Negative).
+        3. Extract a short verbatim key_quote (max 15 words) that MUST be an exact substring of the review.
+        4. Set has_pii to true if it contains names, emails, phone numbers.
+
+        Reviews to analyze:
+        {formatted_reviews}
+
+        Respond ONLY with a valid JSON object formatted as:
+        {{
+            "results": [
+                {{
+                    "review_id": "exact Review ID",
+                    "theme": "string from {THEMES}",
+                    "sentiment": "Positive" or "Neutral" or "Negative",
+                    "key_quote": "string",
+                    "has_pii": boolean
+                }}
+            ]
+        }}
+        """
+        
+        results_map = {}
+        for attempt in range(3):
+            try:
+                response = self.client.chat.completions.create(
+                    model='llama-3.1-8b-instant',
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
+                )
+                import json
+                raw_content = response.choices[0].message.content
+                data = json.loads(raw_content)
+                items = data.get("results", [])
+                if isinstance(items, list):
+                    for item in items:
+                        rid = item.get("review_id")
+                        if rid:
+                            results_map[rid] = item
+                break
+            except Exception as e:
+                if ("429" in str(e) or "rate_limit" in str(e)) and attempt < 2:
+                    import time
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                print(f"Error in batch chunk: {e}")
+                break
+
+        analyzed = []
+        for r in chunk:
+            item = results_map.get(r.review_id, {})
+            extracted_quote = item.get("key_quote", "")
+            has_pii = item.get("has_pii", False)
+            if extracted_quote and extracted_quote not in r.review_text:
+                extracted_quote = None
+            if has_pii:
+                extracted_quote = None
+            
+            analyzed.append(AnalyzedReview(
+                review_id=r.review_id,
+                date=r.date,
+                rating=r.rating,
+                review_text=r.review_text,
+                theme=item.get("theme", "General/Other"),
+                sentiment=item.get("sentiment", "Neutral"),
+                key_quote=extracted_quote,
+                has_pii=has_pii
+            ))
+        return analyzed
+
     def analyze_batch(self, reviews: List[Review]) -> List[AnalyzedReview]:
         """
-        Analyzes a list of reviews.
+        Analyzes a list of reviews using mini-batches of 10.
         """
         analyzed = []
-        for r in reviews:
-            analyzed.append(self.analyze_review(r))
+        chunk_size = 10
+        for i in range(0, len(reviews), chunk_size):
+            chunk = reviews[i:i + chunk_size]
+            analyzed.extend(self.analyze_batch_chunk(chunk))
         return analyzed
 
     def generate_pulse_report(self, aggregated_df_json: str, quotes: List[str]) -> "src.models.PulseReport":
